@@ -1,8 +1,6 @@
-"""Metrics."""
-
 from typing import Any, Dict, Union, List
 from dataclasses import dataclass
-import datetime
+from datetime import datetime
 
 import pandas as pd
 
@@ -43,7 +41,17 @@ class CountNull(Metric):
     aggregation: str = "any"  # either "all", or "any"
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        
+        mask = df[self.columns[0]].isna()
+        if self.aggregation == "any":
+            for column in self.columns[1:]:
+                mask |= df[column].isna()
+        else:
+            for column in self.columns[1:]:
+                mask &= df[column].isna()
+        
+        k = sum(mask)
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -54,7 +62,8 @@ class CountDuplicates(Metric):
     columns: List[str]
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        k = sum(df.duplicated(subset=self.columns))
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -66,7 +75,8 @@ class CountValue(Metric):
     value: Union[str, int, float]
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        k = sum(df[self.column] == self.value)
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -79,7 +89,8 @@ class CountBelowValue(Metric):
     strict: bool = False
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        k = sum(df[self.column] < self.value if self.strict else df[self.column] <= self.value)
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -92,7 +103,8 @@ class CountBelowColumn(Metric):
     strict: bool = False
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        k = sum(df[self.column_x] < df[self.column_y] if self.strict else df[self.column_x] <= df[self.column_y])
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -106,7 +118,9 @@ class CountRatioBelow(Metric):
     strict: bool = False
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        n = len(df)
+        k = sum(df[self.column_x]/df[self.column_y] < df[self.column_z] if self.strict 
+                else df[self.column_x]/df[self.column_y] <= df[self.column_z])
         return {"total": n, "count": k, "delta": k / n}
 
 
@@ -118,7 +132,8 @@ class CountCB(Metric):
     conf: float = 0.95
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
+        alpha = 1 - self.conf
+        lcb, ucb = df[self.column].quantile([alpha/2, 1-alpha/2])
         return {"lcb": lcb, "ucb": ucb}
 
 
@@ -130,5 +145,8 @@ class CountLag(Metric):
     fmt: str = "%Y-%m-%d"
 
     def __call__(self, df: pd.DataFrame) -> Dict[str, Any]:
-        ...
-        return {"today": a, "last_day": b, "lag": lag}
+        a = datetime.today ()
+        b = datetime.strptime(max(df[self.column]), self.fmt)
+        lag = a - b
+        return {"today": a.strftime(self.fmt), "last_day": b.strftime(self.fmt), "lag": lag.days}
+
